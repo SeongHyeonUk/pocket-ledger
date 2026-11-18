@@ -1,0 +1,47 @@
+{
+  "name": "pocket-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-pocket-ledger \"node --test tests/firestore-rules.mjs\"",
+    "test:e2e": "playwright test",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5",
+    "@tailwindcss/vite": "^4",
+    "firebase": "^12",
+    "lucide-react": "^0.468",
+    "react": "^19",
+    "react-dom": "^19",
+    "react-hook-form": "^7",
+    "react-router": "^7",
+    "recharts": "^3",
+    "tailwindcss": "^4",
+    "workbox-window": "^7.4.1",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@playwright/test": "^1",
+    "@testing-library/react": "^16",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5",
+    "eslint": "^9",
+    "firebase-tools": "^15.36.0",
+    "jsdom": "^27.4.0",
+    "typescript": "^5",
+    "typescript-eslint": "^8",
+    "vite": "^7",
+    "vite-plugin-pwa": "^1",
+    "vitest": "^4"
+  }
+}

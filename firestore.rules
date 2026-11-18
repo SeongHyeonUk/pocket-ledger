@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    function text(value, max) {
+      return value is string && value.size() <= max;
+    }
+    function title(value) {
+      return text(value, 100) && value.size() > 0;
+    }
+    function date(value) {
+      return value is string && value.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}');
+    }
+    function amount(value) {
+      return value is int && value >= 1 && value <= 1000000000;
+    }
+    function keys(d, fields) {
+      let all = fields.concat(['id', 'uid', 'version', 'deleted', 'createdAt', 'updatedAt']);
+      return d.keys().hasOnly(all) && d.keys().hasAll(all);
+    }
+    function transaction(d) {
+      return keys(d, ['name', 'type', 'amount', 'date', 'category', 'bucket', 'included', 'memo',
+                      'payment', 'subscriptionId', 'goalId'])
+        && title(d.name) && d.type in ['income', 'expense', 'saving']
+        && amount(d.amount) && date(d.date) && title(d.category)
+        && d.bucket in ['transit', 'weekly', 'lottery', 'other'] && d.included is bool
+        && text(d.memo, 500) && text(d.payment, 100)
+        && d.subscriptionId is string && d.subscriptionId.matches('[A-Za-z0-9_-]{0,100}')
+        && d.goalId is string && d.goalId.matches('[A-Za-z0-9_-]{0,100}');
+    }
+    function subscription(d) {
+      return keys(d, ['name', 'amount', 'cycle', 'nextDate', 'active', 'category', 'memo', 'priceHistory', 'scheduleHistory'])
+        && title(d.name) && amount(d.amount) && d.cycle in ['weekly', 'monthly', 'yearly']
+        && (d.nextDate == null || date(d.nextDate)) && d.active is bool
+        && title(d.category) && text(d.memo, 500)
+        && d.priceHistory is list && d.priceHistory.size() <= 120
+        && d.scheduleHistory is list && d.scheduleHistory.size() <= 120;
+    }
+    function goal(d) {
+      return keys(d, ['name', 'amount', 'memo']) && title(d.name) && amount(d.amount) && text(d.memo, 500);
+    }
+    function budgetAmount(value) {
+      return value is int && value >= 0 && value <= 1000000000;
+    }
+    function period(d, id) {
+      return keys(d, ['effective', 'startDay', 'incomeDay', 'expectedIncome', 'savings', 'transit', 'weekly',
+                      'lottery', 'lotteryCycle', 'lotteryInWeekly'])
+        && date(d.effective) && d.effective == id && d.startDay is int && d.startDay >= 1 && d.startDay <= 31
+        && d.incomeDay is int && d.incomeDay >= 1 && d.incomeDay <= 31
+        && budgetAmount(d.expectedIncome) && budgetAmount(d.savings) && budgetAmount(d.transit)
+        && budgetAmount(d.weekly) && budgetAmount(d.lottery) && d.lotteryInWeekly is bool
+        && d.lotteryCycle in ['weekly', 'biweekly', 'monthly', 'disabled'];
+    }
+    function valid(uid, kind, id) {
+      let d = request.resource.data;
+      return id.matches('[A-Za-z0-9_-]{1,100}') && d.id == id && d.uid == uid
+        && d.updatedAt == request.time && d.version is int && d.deleted is bool
+        && ((kind == 'transactions' && transaction(d))
+            || (kind == 'subscriptions' && subscription(d))
+            || (kind == 'savingsGoals' && goal(d)) || (kind == 'periods' && period(d, id)));
+    }
+    match /users/{uid}/{kind}/{id} {
+      allow read: if owner(uid) && kind in ['transactions', 'subscriptions', 'savingsGoals', 'periods'];
+      allow create: if owner(uid) && valid(uid, kind, id)
+        && request.resource.data.version == 1 && (!request.resource.data.deleted || kind == 'subscriptions')
+        && request.resource.data.createdAt == request.time;
+      allow update: if owner(uid) && valid(uid, kind, id) && !resource.data.deleted
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.version == resource.data.version + 1
+        && (!request.resource.data.deleted
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleted', 'version', 'updatedAt'])
+            || (kind == 'subscriptions'
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleted', 'version', 'updatedAt', 'scheduleHistory'])));
+    }
+  }
+}

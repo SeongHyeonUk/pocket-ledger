@@ -1,0 +1,10 @@
+{
+  "framework": "vite",
+  "buildCommand": "pnpm build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/__/auth/:path*", "destination": "https://pocket-ledger-55b04.firebaseapp.com/__/auth/:path*" },
+    { "source": "/__/firebase/init.json", "destination": "https://pocket-ledger-55b04.firebaseapp.com/__/firebase/init.json" },
+    { "source": "/((?!.*\\.).*)", "destination": "/index.html" }
+  ]
+}
