@@ -3,7 +3,7 @@ import { NavLink, Route, Routes } from 'react-router'
 import { Activity, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, LayoutDashboard, List, Plus, Settings, Wallet } from 'lucide-react'
 import { budgetTotals, initialSubscriptions, resolveBudget, seoulToday, shiftDate } from './budget'
 import { trustedDevice } from './database'
-import { deleteRecord, mergeBackup } from './store'
+import { deleteRecord, mergeBackup, saveRecord } from './store'
 import { TransactionForm, transactionTypes } from './transaction-form'
 import { useRecords } from './use-records'
 import { RecordManager } from './record-manager'
@@ -34,7 +34,11 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
   const transactions = useRecords(uid, 'transactions', period)
   const subscriptions = useRecords(uid, 'subscriptions')
   const goals = useRecords(uid, 'savingsGoals')
-  const [editor, setEditor] = useState<false | true | RecordOf<'transactions'>>(false)
+  const balances = useRecords(uid, 'settings')
+  const balance = balances.items.find(item => item.id === 'main')
+  const [balanceDraft, setBalanceDraft] = useState<string | null>(null)
+  const [editor, setEditor] = useState<false | 'income' | 'expense' | RecordOf<'transactions'>>(false)
+  const [showIncome, setShowIncome] = useState(false)
   const [writes, setWrites] = useState(0)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -42,9 +46,9 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
   const [category, setCategory] = useState('')
   const states = [transactions, subscriptions, goals, revisions]
   const ready = states.every(state => state.ready)
-  const pending = writes > 0 || states.some(state => state.pending)
-  const cached = states.some(state => state.cached)
-  const readError = states.some(state => state.error)
+  const pending = writes > 0 || balances.pending || states.some(state => state.pending)
+  const cached = balances.cached || states.some(state => state.cached)
+  const readError = balances.error || states.some(state => state.error)
   const status = readError || error ? '동기화 오류' : pending ? '서버 반영 대기'
     : cached ? '오프라인 또는 연결 중' : '동기화 완료'
 
@@ -58,14 +62,14 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
   }
 
   useEffect(() => {
-    if (!pending && !editor) return
+    if (!pending && !editor && balanceDraft === null) return
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [pending, editor])
+  }, [pending, editor, balanceDraft])
 
   const planned = subscriptions.items.flatMap(item => {
     const amount = historicalSubscription(item, period.start, period.end)
@@ -125,7 +129,7 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
     ['예정 고정 지출', money(budget.plannedFixed)], ['예산 배정액', money(budget.allocated)],
     ['실제 잔여액', money(budget.actualSurplus)], ['실제 저축액', money(budget.savings)],
   ]
-  return <div className="ledger" data-pending={pending}>
+  return <div className="ledger" data-pending={pending || balanceDraft !== null}>
     <aside className="sidebar"><div className="brand"><Wallet size={22} /> Pocket Ledger</div>
       <nav aria-label="가계부 메뉴">{pages.map(([path, label, Icon]) =>
         <NavLink to={path} key={path} end={path === '/'}><Icon size={19} />{label}</NavLink>)}</nav>
@@ -144,12 +148,34 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
       {readError && <p className="error" role="alert">Firestore 접근 권한을 확인해 주세요. 서버 데이터의 상태를 확인할 수 없습니다.</p>}
       <Routes>
         <Route path="/" element={<>
-          <div className="row heading">{title('대시보드')}<button onClick={() => setEditor(true)}><Plus size={18} /> 빠른 지출 등록</button></div>
+          <div className="row heading">{title('대시보드')}<button onClick={() => setEditor('expense')}><Plus size={18} /> 빠른 지출 등록</button></div>
           {period.start <= today && today <= period.end && <p className="period-days">종료일까지 {Math.round((Date.parse(period.end) - Date.parse(today)) / 86_400_000)}일</p>}
           <section className="kpis" aria-label="기간 요약">{kpis.map(([label, value], index) => <article key={label} className={index === 3 ? 'card primary-card' : 'card'}>
             <span>{label}</span><strong>{ready ? value : '—'}</strong>
             {index === 0 && incomeDate && incomeDate <= period.end && <small>{incomeDate} 입금 예정</small>}
+            {label === '실제 수입' && <div className="actions">
+              <button className="secondary" type="button" onClick={() => setEditor('income')}>수입 추가</button>
+              <button className="secondary" type="button" aria-expanded={showIncome} onClick={() => setShowIncome(!showIncome)}>수입 내역 수정</button>
+            </div>}
           </article>)}</section>
+          {showIncome && <section className="card"><h2>이번 선택 기간의 수입 내역</h2>
+            {transactionList(transactions.items.filter(item => item.type === 'income'), true)}
+          </section>}
+          <section className="card"><h2>현재 보유 총액</h2>
+            <p>직접 확인한 금액을 기록하세요. 수입·지출 통계에는 반영되지 않습니다.</p>
+            <form className="actions spaced" onSubmit={async event => {
+              event.preventDefault()
+              if (balanceDraft === null || balanceDraft.trim() === '' || pending) return
+              const ok = await write(saveRecord(uid, 'settings', { balance: Number(balanceDraft) }, 'main', balance?.version))
+              if (ok) setBalanceDraft(null)
+            }}>
+              <input aria-label="현재 보유 총액 (원)" type="number" inputMode="numeric" min={0} max={1000000000}
+                step={1} required disabled={!balances.ready || pending} placeholder="금액 (원)"
+                value={balanceDraft ?? balance?.balance ?? ''} onChange={event => setBalanceDraft(event.target.value)} />
+              <button type="submit" disabled={!balances.ready || pending || balanceDraft === null}>총액 저장</button>
+            </form>
+            {balance && <p>저장된 총액 <strong>{money(balance.balance)}</strong></p>}
+          </section>
           {ready && (budget.remaining < 0 || (weekLeft !== null && weekLeft < 0)) && <p className="error">예산을 초과했습니다.</p>}
           <section className="card"><h2>최근 거래</h2>{transactionList(transactions.items.slice(0, 6))}</section>
           <section className="card"><h2>예정 구독</h2>{subscriptions.ready && <ul className="record-list">{liveSubscriptions.filter(item => item.active).map(item => <li key={item.id}>
@@ -158,7 +184,7 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
           {charts()}
         </>} />
         <Route path="/transactions" element={<>
-          <div className="row heading">{title('거래')}<button onClick={() => setEditor(true)}><Plus size={18} /> 거래 추가</button></div>
+          <div className="row heading">{title('거래')}<button onClick={() => setEditor('expense')}><Plus size={18} /> 거래 추가</button></div>
           <section className="card">
             <div className="filters">
               <input aria-label="거래 검색" value={search} onChange={event => setSearch(event.target.value)} placeholder="거래명 · 메모 검색" />
@@ -185,7 +211,7 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
           {title('설정')}
           {revisions.ready && <BudgetSettings uid={uid} current={currentBudget.settings} effective={nextBudgetDate}
             scheduled={revisions.items.find(item => item.effective === nextBudgetDate)} write={write} />}
-          <Backup uid={uid} disabled={pending || cached || readError} />
+          <Backup uid={uid} disabled={pending || cached || Boolean(readError)} />
           <section className="card"><h2>오프라인 저장</h2>
             <p>{trustedDevice ? '이 브라우저에 가계부 데이터가 저장됩니다. 개인 기기에서 사용하세요.' : '이 브라우저에 가계부 데이터를 지속적으로 저장하지 않습니다.'}</p>
             <button type="button" disabled={pending || !!editor} onClick={() => {
@@ -201,7 +227,9 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
       </Routes>
     </main>
     {editor && <div className="overlay">
-      <TransactionForm uid={uid} record={editor === true ? undefined : editor} subscriptions={liveSubscriptions}
+      <TransactionForm uid={uid} record={typeof editor === 'object' ? editor : undefined}
+        initialType={typeof editor === 'string' ? editor : undefined}
+        initialDate={today >= period.start && today <= period.end ? today : period.start} subscriptions={liveSubscriptions}
         goals={goals.items} close={() => setEditor(current => current === editor ? false : current)} write={write} />
     </div>}
   </div>

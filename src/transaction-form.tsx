@@ -11,21 +11,23 @@ export const buckets = { weekly: '자유 지출', transit: '교통비', lottery:
 type Props = {
   uid: string
   record?: RecordOf<'transactions'>
+  initialType?: Values<'transactions'>['type']
+  initialDate?: string
   subscriptions: RecordOf<'subscriptions'>[]
   goals: RecordOf<'savingsGoals'>[]
   close: () => void
   write: (promise: Promise<void>) => Promise<boolean>
 }
 
-export function TransactionForm({ uid, record, subscriptions, goals, close, write }: Props) {
+export function TransactionForm({ uid, record, initialType = 'expense', initialDate = seoulToday(), subscriptions, goals, close, write }: Props) {
   const [id] = useState(() => record?.id ?? crypto.randomUUID())
   const [queued, setQueued] = useState(false)
   const [rejected, setRejected] = useState(false)
   const { register, watch, setValue, handleSubmit, formState } = useForm<Values<'transactions'>>({
     resolver: zodResolver(schemas.transactions),
     defaultValues: record ?? {
-      name: '', type: 'expense', amount: 0, date: seoulToday(), category: '기타',
-      bucket: 'weekly', included: true, memo: '', payment: '', subscriptionId: '', goalId: '',
+      name: '', type: initialType, amount: 0, date: initialDate, category: initialType === 'income' ? '용돈' : '기타',
+      bucket: 'weekly', included: initialType !== 'income', memo: '', payment: '', subscriptionId: '', goalId: '',
     },
   })
   const type = watch('type')

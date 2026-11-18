@@ -22,6 +22,7 @@ export function validateBackup(data: unknown) {
     seen.add(key)
     const parsed = schemas[collection].parse(values)
     if ('effective' in parsed && parsed.effective !== id) throw new Error('예산 설정의 적용일이 잘못되었습니다.')
+    if (collection === 'settings' && id !== 'main') throw new Error('보유 총액 설정의 ID가 잘못되었습니다.')
     if (deleted && collection !== 'subscriptions') throw new Error('백업의 삭제 상태가 잘못되었습니다.')
     return { collection, id, deleted, values: parsed }
   })

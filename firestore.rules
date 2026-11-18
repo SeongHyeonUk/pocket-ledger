@@ -1,6 +1,22 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /users/{uid}/settings/{setting} {
+      function validBalance() {
+        let d = request.resource.data;
+        let fields = ['id', 'uid', 'version', 'deleted', 'createdAt', 'updatedAt', 'balance'];
+        return d.keys().hasAll(fields) && d.keys().hasOnly(fields)
+          && d.id == 'main' && d.uid == uid && d.version is int && d.deleted == false
+          && d.updatedAt == request.time && d.balance is int
+          && d.balance >= 0 && d.balance <= 1000000000;
+      }
+      allow read: if owner(uid);
+      allow create: if owner(uid) && setting == 'main' && validBalance() && request.resource.data.version == 1
+        && request.resource.data.createdAt == request.time;
+      allow update: if owner(uid) && setting == 'main' && validBalance()
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
     function owner(uid) {
       return request.auth != null && request.auth.uid == uid;
     }

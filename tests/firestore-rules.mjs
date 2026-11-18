@@ -105,3 +105,23 @@ test('subscription, goal, and budget rules enforce account and shape', async () 
     await env.cleanup()
   }
 })
+
+test('manual balance supports zero and only its owner can read or update it', async () => {
+  const env = await initializeTestEnvironment({ projectId: 'demo-pocket-ledger' })
+  try {
+    const owner = env.authenticatedContext('balance-owner').firestore()
+    const other = env.authenticatedContext('other').firestore()
+    const path = 'users/balance-owner/settings/main'
+    const target = doc(owner, path)
+    const record = { id: 'main', uid: 'balance-owner', balance: 0, version: 1, deleted: false,
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp() }
+    await assertFails(setDoc(doc(other, path), record))
+    await assertSucceeds(setDoc(target, record))
+    await assertFails(getDoc(doc(other, path)))
+    await assertFails(updateDoc(target, { balance: -1, version: 2, updatedAt: serverTimestamp() }))
+    await assertSucceeds(updateDoc(target, { balance: 120000, version: 2, updatedAt: serverTimestamp() }))
+    equal((await getDoc(target)).data().balance, 120000)
+  } finally {
+    await env.cleanup()
+  }
+})

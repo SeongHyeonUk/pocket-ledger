@@ -30,6 +30,7 @@ export const schemas = {
     scheduleHistory: z.array(schedule.extend({ effective: date })).max(120).default([]),
   }),
   savingsGoals: z.object({ name: title, amount, memo }),
+  settings: z.object({ balance: budgetAmount }),
   periods: z.object({
     effective: date,
     startDay: z.number().int().min(1).max(31),
