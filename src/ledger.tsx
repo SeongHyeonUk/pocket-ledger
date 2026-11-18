@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { NavLink, Route, Routes } from 'react-router'
 import { Activity, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, LayoutDashboard, List, Plus, Settings, Wallet } from 'lucide-react'
-import { budgetTotals, initialSubscriptions, resolveBudget, seoulToday, shiftDate } from './budget'
+import { adjustedAmount, budgetTotals, initialSubscriptions, mondayWeek, resolveBudget, seoulToday, shiftDate } from './budget'
 import { trustedDevice } from './database'
 import { deleteRecord, mergeBackup, saveRecord } from './store'
 import { TransactionForm, transactionTypes } from './transaction-form'
@@ -25,13 +25,25 @@ const pages = [
 ] as const
 
 export default function Ledger({ uid, logout }: { uid: string; logout: () => void }) {
-  const today = seoulToday()
+  const [today, setToday] = useState(seoulToday)
+  useEffect(() => {
+    const refresh = () => setToday(seoulToday())
+    const interval = window.setInterval(refresh, 15000)
+    window.addEventListener('focus', refresh)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [])
   const [selected, setSelected] = useState<string>()
   const revisions = useRecords(uid, 'periods')
   const { period, settings } = resolveBudget(selected ?? today, revisions.items)
   const currentBudget = resolveBudget(today, revisions.items)
   const nextBudgetDate = shiftDate(currentBudget.period.end, 1)
   const transactions = useRecords(uid, 'transactions', period)
+  const week = mondayWeek(today)
+  const weeklyTransactions = useRecords(uid, 'transactions', week)
+  const adjustments = useRecords(uid, 'adjustments')
   const subscriptions = useRecords(uid, 'subscriptions')
   const goals = useRecords(uid, 'savingsGoals')
   const balances = useRecords(uid, 'settings')
@@ -39,6 +51,9 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
   const [balanceDraft, setBalanceDraft] = useState<string | null>(null)
   const [editor, setEditor] = useState<false | 'income' | 'expense' | RecordOf<'transactions'>>(false)
   const [showIncome, setShowIncome] = useState(false)
+  const [adjustmentForm, setAdjustmentForm] = useState<{
+    id: string; label: string; amount: number; version?: number
+  }>()
   const [writes, setWrites] = useState(0)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -46,9 +61,10 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
   const [category, setCategory] = useState('')
   const states = [transactions, subscriptions, goals, revisions]
   const ready = states.every(state => state.ready)
-  const pending = writes > 0 || balances.pending || states.some(state => state.pending)
-  const cached = balances.cached || states.some(state => state.cached)
-  const readError = balances.error || states.some(state => state.error)
+  const syncStates = [...states, balances, adjustments, weeklyTransactions]
+  const pending = writes > 0 || syncStates.some(state => state.pending)
+  const cached = syncStates.some(state => state.cached)
+  const readError = syncStates.some(state => state.error)
   const status = readError || error ? '동기화 오류' : pending ? '서버 반영 대기'
     : cached ? '오프라인 또는 연결 중' : '동기화 완료'
 
@@ -62,14 +78,14 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
   }
 
   useEffect(() => {
-    if (!pending && !editor && balanceDraft === null) return
+    if (!pending && !editor && !adjustmentForm && balanceDraft === null) return
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [pending, editor, balanceDraft])
+  }, [pending, editor, adjustmentForm, balanceDraft])
 
   const planned = subscriptions.items.flatMap(item => {
     const amount = historicalSubscription(item, period.start, period.end)
@@ -88,12 +104,20 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
   }, [subscriptionsEmpty, today, uid])
   const budget = budgetTotals(settings, period.weeks.length,
     transactions.items.map(item => ({ ...item, occurrenceId: item.subscriptionId })), planned)
-  const week = period.weeks.find(item => item.start <= today && item.end >= today)
-  const weekSpent = transactions.items.filter(item => week && item.date >= week.start && item.date <= week.end
-    && item.type === 'expense' && (item.bucket === 'weekly' || (item.bucket === 'lottery' && settings.lotteryInWeekly))
-    && item.included && !planned.some(plan => plan.id === item.subscriptionId))
+  const weekSpent = weeklyTransactions.items.filter(item =>
+    item.type === 'expense' && (item.bucket === 'weekly' || (item.bucket === 'lottery' && currentBudget.settings.lotteryInWeekly))
+    && item.included && !item.subscriptionId)
     .reduce((sum, item) => sum + item.amount, 0)
-  const weekLeft = week ? settings.weekly - weekSpent : null
+  const periodId = `period-${period.start}`
+  const weekId = `week-${week.start}`
+  const periodCalculated = budget.remaining + budget.income
+  const weekCalculated = currentBudget.settings.weekly - weekSpent
+  const periodAdjustment = adjustments.items.find(item => item.id === periodId)
+  const weekAdjustment = adjustments.items.find(item => item.id === weekId)
+  const remaining = adjustedAmount(periodCalculated, periodAdjustment)
+  const weekLeft = adjustedAmount(weekCalculated, weekAdjustment)
+  const periodReady = ready && adjustments.ready
+  const weekReady = revisions.ready && weeklyTransactions.ready && adjustments.ready
   const incomeDate = nextOccurrence({ active: true, amount: settings.expectedIncome, cycle: 'monthly',
     nextDate: `2000-01-${String(settings.incomeDay).padStart(2, '0')}` }, period.start)
   const filtered = transactions.items.filter(item => (!type || item.type === type) && (!category || item.category === category)
@@ -122,8 +146,8 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
 
   const kpis = [
     ['예정 수입', money(budget.expectedIncome)], ['실제 수입', money(budget.income)],
-    ['실제 소비', money(budget.expenses)], ['남은 예산', money(budget.remaining)],
-    ['이번 주 남은 금액', weekLeft === null ? '—' : money(weekLeft)],
+    ['실제 소비', money(budget.expenses)], ['남은 예산', periodReady ? money(remaining) : '—'],
+    ['이번 주 남은 금액', weekReady ? money(weekLeft) : '—'],
     ['저축 목표 달성률', budget.savingsTarget ? `${Math.round(budget.savings / budget.savingsTarget * 100)}%` : '—'],
     ['가용 현금', money(budget.cash)], ['예상 여윳돈', money(budget.expectedSurplus)],
     ['예정 고정 지출', money(budget.plannedFixed)], ['예산 배정액', money(budget.allocated)],
@@ -151,12 +175,19 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
           <div className="row heading">{title('대시보드')}<button onClick={() => setEditor('expense')}><Plus size={18} /> 빠른 지출 등록</button></div>
           {period.start <= today && today <= period.end && <p className="period-days">종료일까지 {Math.round((Date.parse(period.end) - Date.parse(today)) / 86_400_000)}일</p>}
           <section className="kpis" aria-label="기간 요약">{kpis.map(([label, value], index) => <article key={label} className={index === 3 ? 'card primary-card' : 'card'}>
-            <span>{label}</span><strong>{ready ? value : '—'}</strong>
+            <span>{label}</span><strong>{label === '이번 주 남은 금액' || ready ? value : '—'}</strong>
             {index === 0 && incomeDate && incomeDate <= period.end && <small>{incomeDate} 입금 예정</small>}
             {label === '실제 수입' && <div className="actions">
               <button className="secondary" type="button" onClick={() => setEditor('income')}>수입 추가</button>
               <button className="secondary" type="button" aria-expanded={showIncome} onClick={() => setShowIncome(!showIncome)}>수입 내역 수정</button>
             </div>}
+            {label === '남은 예산' && <button className="budget-edit" type="button" disabled={!periodReady || pending}
+              onClick={() => setAdjustmentForm({ id: periodId, label, amount: remaining, version: periodAdjustment?.version })}>남은 예산 수정</button>}
+            {label === '이번 주 남은 금액' && <>
+              <small>{week.start.slice(5)} ~ {week.end.slice(5)} · 월요일 시작</small>
+              <button className="secondary" type="button" disabled={!weekReady || pending}
+                onClick={() => setAdjustmentForm({ id: weekId, label, amount: weekLeft, version: weekAdjustment?.version })}>이번 주 금액 수정</button>
+            </>}
           </article>)}</section>
           {showIncome && <section className="card"><h2>이번 선택 기간의 수입 내역</h2>
             {transactionList(transactions.items.filter(item => item.type === 'income'), true)}
@@ -176,7 +207,7 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
             </form>
             {balance && <p>저장된 총액 <strong>{money(balance.balance)}</strong></p>}
           </section>
-          {ready && (budget.remaining < 0 || (weekLeft !== null && weekLeft < 0)) && <p className="error">예산을 초과했습니다.</p>}
+          {((periodReady && remaining < 0) || (weekReady && weekLeft < 0)) && <p className="error">예산을 초과했습니다.</p>}
           <section className="card"><h2>최근 거래</h2>{transactionList(transactions.items.slice(0, 6))}</section>
           <section className="card"><h2>예정 구독</h2>{subscriptions.ready && <ul className="record-list">{liveSubscriptions.filter(item => item.active).map(item => <li key={item.id}>
             <div><strong>{item.name}</strong><small>{nextOccurrence(item, today) || '결제일 미정'}</small></div><strong>{money(item.amount)}</strong>
@@ -232,5 +263,22 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
         initialDate={today >= period.start && today <= period.end ? today : period.start} subscriptions={liveSubscriptions}
         goals={goals.items} close={() => setEditor(current => current === editor ? false : current)} write={write} />
     </div>}
+    {adjustmentForm && <div className="overlay"><dialog open className="editor" aria-labelledby="adjustment-title">
+      <form onSubmit={async event => {
+        event.preventDefault()
+        if (pending || (adjustmentForm.id !== periodId && adjustmentForm.id !== weekId)) return
+        const amount = Number(new FormData(event.currentTarget).get('amount'))
+        const reference = adjustmentForm.id === weekId ? weekCalculated : periodCalculated
+        const ok = await write(saveRecord(uid, 'adjustments', { amount, reference }, adjustmentForm.id, adjustmentForm.version))
+        if (ok) setAdjustmentForm(current => current === adjustmentForm ? undefined : current)
+      }}>
+        <div className="row"><h2 id="adjustment-title">{adjustmentForm.label} 수정</h2>
+          <button className="secondary" type="button" onClick={() => setAdjustmentForm(undefined)}>닫기</button></div>
+        <label className="file-input spaced">남은 금액 (원)<input name="amount" type="number" autoFocus
+          defaultValue={adjustmentForm.amount} min={-1000000000} max={1000000000} step={1} required /></label>
+        {error && <p className="error" role="alert">{error}</p>}
+        <button disabled={pending}>저장</button>
+      </form>
+    </dialog></div>}
   </div>
 }

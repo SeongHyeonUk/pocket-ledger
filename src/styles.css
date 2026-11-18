@@ -103,6 +103,7 @@ button:disabled { opacity: .65; cursor: wait; }
 .kpis .card strong { font-size: clamp(1rem, 2.35vw, 1.65rem); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .kpis .card span { font-size: .9rem; }
 .primary-card { color: #fff; background: #174b38; border-color: #174b38; }
+.budget-edit { background: #ffffff; color: #174b38; }
 .record-list { margin-top: 12px; }
 .record-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid var(--line); }
 .record-list small { display: block; color: var(--muted); margin-top: 3px; }

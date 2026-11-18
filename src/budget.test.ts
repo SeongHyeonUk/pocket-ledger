@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
-import { budgetPeriod, budgetTotals, defaultBudget, initialSubscriptions, resolveBudget, seoulToday } from './budget.ts'
+import { adjustedAmount, budgetPeriod, budgetTotals, defaultBudget, initialSubscriptions, mondayWeek, resolveBudget, seoulToday } from './budget.ts'
 import { nextOccurrence, plannedSubscription } from './subscriptions.ts'
+
+test('일요일까지 같은 주를 사용하고 월요일에 새 주로 전환한다', () => {
+  assert.deepEqual(mondayWeek('2027-01-03'), { start: '2026-12-28', end: '2027-01-03' })
+  assert.deepEqual(mondayWeek('2027-01-04'), { start: '2027-01-04', end: '2027-01-10' })
+})
+
+test('수정 후에도 새 수입은 더하고 지출은 차감한다', () => {
+  const adjustment = { amount: 30000, reference: 100000 }
+  assert.equal(adjustedAmount(100000, adjustment), 30000)
+  assert.equal(adjustedAmount(125000, adjustment), 55000)
+  assert.equal(adjustedAmount(95000, adjustment), 25000)
+  assert.equal(adjustedAmount(30000), 30000)
+})
 
 test('10일 전후, 연도 변경, 서울 자정', () => {
   assert.equal(seoulToday(new Date('2026-12-31T15:00:00Z')), '2027-01-01')

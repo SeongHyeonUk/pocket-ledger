@@ -1,6 +1,22 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /users/{uid}/adjustments/{id} {
+      function validAdjustment() {
+        let d = request.resource.data;
+        return id.matches('(period|week)-[0-9]{4}-[0-9]{2}-[0-9]{2}')
+          && keys(d, ['amount', 'reference']) && d.id == id && d.uid == uid
+          && d.version is int && d.deleted == false && d.updatedAt == request.time
+          && d.amount is int && d.amount >= -1000000000 && d.amount <= 1000000000
+          && d.reference is int && d.reference >= -9007199254740991 && d.reference <= 9007199254740991;
+      }
+      allow read: if owner(uid);
+      allow create: if owner(uid) && validAdjustment() && request.resource.data.version == 1
+        && request.resource.data.createdAt == request.time;
+      allow update: if owner(uid) && validAdjustment()
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
     match /users/{uid}/settings/{setting} {
       function validBalance() {
         let d = request.resource.data;

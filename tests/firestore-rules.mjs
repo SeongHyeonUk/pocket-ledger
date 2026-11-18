@@ -125,3 +125,24 @@ test('manual balance supports zero and only its owner can read or update it', as
     await env.cleanup()
   }
 })
+
+test('period and week adjustments are isolated and reject stale writes', async () => {
+  const env = await initializeTestEnvironment({ projectId: 'demo-pocket-ledger' })
+  try {
+    const owner = env.authenticatedContext('adjuster').firestore()
+    const other = env.authenticatedContext('someone-else').firestore()
+    for (const id of ['period-2026-11-10', 'week-2026-11-16']) {
+      const path = `users/adjuster/adjustments/${id}`
+      const target = doc(owner, path)
+      const record = { id, uid: 'adjuster', amount: 30000, reference: -2500, version: 1, deleted: false,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp() }
+      await assertSucceeds(setDoc(target, record))
+      await assertFails(getDoc(doc(other, path)))
+      await assertFails(updateDoc(target, { amount: 1000, version: 1, updatedAt: serverTimestamp() }))
+      await assertSucceeds(updateDoc(target, { amount: 1000, version: 2, updatedAt: serverTimestamp() }))
+      equal((await getDoc(target)).data().amount, 1000)
+    }
+  } finally {
+    await env.cleanup()
+  }
+})

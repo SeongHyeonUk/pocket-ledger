@@ -53,6 +53,16 @@ export function shiftDate(date: string, days: number) {
   return dateOnly(new Date(Date.parse(date + 'T00:00:00Z') + days * dayMs))
 }
 
+export function mondayWeek(date: string) {
+  const weekday = new Date(date + 'T00:00:00Z').getUTCDay()
+  const start = shiftDate(date, -((weekday + 6) % 7))
+  return { start, end: shiftDate(start, 6) }
+}
+
+export function adjustedAmount(calculated: number, adjustment?: { amount: number; reference: number }) {
+  return adjustment ? adjustment.amount + calculated - adjustment.reference : calculated
+}
+
 function periodBetween(startDate: string, endDate: string) {
   const start = Date.parse(startDate + 'T00:00:00Z')
   const next = Date.parse(endDate + 'T00:00:00Z') + dayMs

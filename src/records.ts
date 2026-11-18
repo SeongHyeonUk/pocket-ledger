@@ -31,6 +31,10 @@ export const schemas = {
   }),
   savingsGoals: z.object({ name: title, amount, memo }),
   settings: z.object({ balance: budgetAmount }),
+  adjustments: z.object({
+    amount: z.number().int().min(-1_000_000_000).max(1_000_000_000),
+    reference: z.number().int().safe(),
+  }),
   periods: z.object({
     effective: date,
     startDay: z.number().int().min(1).max(31),
