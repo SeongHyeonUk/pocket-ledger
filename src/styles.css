@@ -99,7 +99,7 @@ button:disabled { opacity: .65; cursor: wait; }
 .sync { color: var(--muted); font-size: .875rem; }
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin-bottom: 14px; }
-.kpis .card { margin: 0; display: grid; align-content: space-between; gap: 7px; }
+.kpis .card { margin: 0; display: grid; align-content: start; gap: 7px; }
 .kpis .card strong { font-size: clamp(1rem, 2.35vw, 1.65rem); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .kpis .card span { font-size: .9rem; }
 .primary-card { color: #fff; background: #174b38; border-color: #174b38; }

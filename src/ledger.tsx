@@ -145,13 +145,12 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
   }
 
   const kpis = [
-    ['예정 수입', money(budget.expectedIncome)], ['실제 수입', money(budget.income)],
-    ['실제 소비', money(budget.expenses)], ['남은 예산', periodReady ? money(remaining) : '—'],
+    ['남은 예산', periodReady ? money(remaining) : '—'],
     ['이번 주 남은 금액', weekReady ? money(weekLeft) : '—'],
-    ['저축 목표 달성률', budget.savingsTarget ? `${Math.round(budget.savings / budget.savingsTarget * 100)}%` : '—'],
-    ['가용 현금', money(budget.cash)], ['예상 여윳돈', money(budget.expectedSurplus)],
+    ['실제 수입', money(budget.income)], ['실제 소비', money(budget.expenses)],
+    ['예정 수입', money(budget.expectedIncome)],
     ['예정 고정 지출', money(budget.plannedFixed)], ['예산 배정액', money(budget.allocated)],
-    ['실제 잔여액', money(budget.actualSurplus)], ['실제 저축액', money(budget.savings)],
+    ['실제 저축액', money(budget.savings)],
   ]
   return <div className="ledger" data-pending={pending || balanceDraft !== null}>
     <aside className="sidebar"><div className="brand"><Wallet size={22} /> Pocket Ledger</div>
@@ -174,9 +173,9 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
         <Route path="/" element={<>
           <div className="row heading">{title('대시보드')}<button onClick={() => setEditor('expense')}><Plus size={18} /> 빠른 지출 등록</button></div>
           {period.start <= today && today <= period.end && <p className="period-days">종료일까지 {Math.round((Date.parse(period.end) - Date.parse(today)) / 86_400_000)}일</p>}
-          <section className="kpis" aria-label="기간 요약">{kpis.map(([label, value], index) => <article key={label} className={index === 3 ? 'card primary-card' : 'card'}>
+          <section className="kpis" aria-label="기간 요약">{kpis.map(([label, value]) => <article key={label} className={label === '남은 예산' ? 'card primary-card' : 'card'}>
             <span>{label}</span><strong>{label === '이번 주 남은 금액' || ready ? value : '—'}</strong>
-            {index === 0 && incomeDate && incomeDate <= period.end && <small>{incomeDate} 입금 예정</small>}
+            {label === '예정 수입' && incomeDate && incomeDate <= period.end && <small>{incomeDate} 입금 예정</small>}
             {label === '실제 수입' && <div className="actions">
               <button className="secondary" type="button" onClick={() => setEditor('income')}>수입 추가</button>
               <button className="secondary" type="button" aria-expanded={showIncome} onClick={() => setShowIncome(!showIncome)}>수입 내역 수정</button>
