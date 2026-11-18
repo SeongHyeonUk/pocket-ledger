@@ -2,6 +2,8 @@
 
 Google 계정으로 개인 가계부를 열고 거래, 예산, 구독, 저축 목표를 관리하는 한국어 PWA입니다. 금액은 정수 원 단위로 처리하며, 날짜와 주기는 서울 시간을 기준으로 합니다.
 
+[Pocket Ledger 열기](https://pocket-ledger-three-amber.vercel.app/)
+
 ## 로컬 실행
 
 Node.js 22.12 이상과 pnpm을 사용합니다. 로컬 환경 파일은 `.env.example`을 `.env.local`로 복사한 뒤 Firebase 웹 앱의 구성값을 채우세요.
@@ -48,6 +50,6 @@ E2E에는 Chrome이 필요합니다. Firestore Emulator에는 Java 21이 필요�
 
 1. Firebase Spark 프로젝트에 웹 앱, Google 로그인 및 Cloud Firestore를 설정합니다. 에뮬레이터를 통과한 `firestore.rules`를 게시합니다.
 2. GitHub의 `main` 브랜치를 Vercel Hobby에 연결합니다. `vercel.json`의 Vite 빌드와 SPA 경로가 적용됩니다.
-3. 프로덕션 환경에 웹 앱 구성값을 입력합니다. `VITE_FIREBASE_AUTH_DOMAIN`에는 배포 호스트 이름을 사용하고, Firebase Authentication의 승인된 도메인에도 그 이름을 추가합니다.
+3. 프로덕션 환경에 웹 앱 구성값을 입력합니다. `VITE_FIREBASE_AUTH_DOMAIN`에는 Firebase 기본 인증 호스트를, `VITE_FIREBASE_PUBLIC_HOST`에는 Vercel 프로덕션 호스트 이름을 입력합니다. 이 Vercel 호스트를 Firebase Authentication의 승인된 도메인에도 추가합니다.
 4. Firebase에서 사용하는 Google OAuth 웹 클라이언트의 승인된 리디렉션 URI에 `https://배포호스트/__/auth/handler`를 등록합니다. Vercel의 인증 경로는 Firebase 프로젝트 기본 인증 호스트로 프록시됩니다.
 5. PC 및 Android에서 로그인과 같은 계정의 실시간 거래 변경을 확인합니다. Android Chrome에서 설치 후 오프라인 보류 및 온라인 복구를 확인합니다. iOS에서는 Safari의 공유 메뉴에서 홈 화면에 추가할 수 있습니다.
