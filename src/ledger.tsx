@@ -114,6 +114,9 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
   const weekCalculated = currentBudget.settings.weekly - weekSpent
   const periodAdjustment = adjustments.items.find(item => item.id === periodId)
   const weekAdjustment = adjustments.items.find(item => item.id === weekId)
+  const lotteryId = `lottery-${period.start}`
+  const lotteryAdjustment = adjustments.items.find(item => item.id === lotteryId)
+  const lotteryDeduction = Math.min(budget.allocations.lottery, Math.max(0, lotteryAdjustment?.amount ?? 0))
   const remaining = adjustedAmount(periodCalculated, periodAdjustment)
   const weekLeft = adjustedAmount(weekCalculated, weekAdjustment)
   const periodReady = ready && adjustments.ready
@@ -149,7 +152,8 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
     ['이번 주 남은 금액', weekReady ? money(weekLeft) : '—'],
     ['실제 수입', money(budget.income)], ['실제 소비', money(budget.expenses)],
     ['예정 수입', money(budget.expectedIncome)],
-    ['예정 고정 지출', money(budget.plannedFixed)], ['예산 배정액', money(budget.allocated)],
+    ['예정 고정 지출', adjustments.ready ? money(budget.plannedFixed - lotteryDeduction) : '—'],
+    ['예산 배정액', money(budget.allocated)],
     ['실제 저축액', money(budget.savings)],
   ]
   return <div className="ledger" data-pending={pending || balanceDraft !== null}>
@@ -176,6 +180,13 @@ export default function Ledger({ uid, logout }: { uid: string; logout: () => voi
           <section className="kpis" aria-label="기간 요약">{kpis.map(([label, value]) => <article key={label} className={label === '남은 예산' ? 'card primary-card' : 'card'}>
             <span>{label}</span><strong>{label === '이번 주 남은 금액' || ready ? value : '—'}</strong>
             {label === '예정 수입' && incomeDate && incomeDate <= period.end && <small>{incomeDate} 입금 예정</small>}
+            {label === '예정 고정 지출' && budget.allocations.lottery > 0 && <button className="secondary lottery-button"
+              type="button" disabled={!periodReady || pending || lotteryDeduction >= budget.allocations.lottery}
+              onClick={() => {
+                void write(saveRecord(uid, 'adjustments', {
+                  amount: Math.min(budget.allocations.lottery, lotteryDeduction + settings.lottery), reference: 0,
+                }, lotteryId, lotteryAdjustment?.version))
+              }}>{lotteryDeduction >= budget.allocations.lottery ? '복권비 차감 완료' : '복권비 차감'}</button>}
             {label === '실제 수입' && <div className="actions">
               <button className="secondary" type="button" onClick={() => setEditor('income')}>수입 추가</button>
               <button className="secondary" type="button" aria-expanded={showIncome} onClick={() => setShowIncome(!showIncome)}>수입 내역 수정</button>

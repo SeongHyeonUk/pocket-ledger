@@ -131,7 +131,7 @@ test('period and week adjustments are isolated and reject stale writes', async (
   try {
     const owner = env.authenticatedContext('adjuster').firestore()
     const other = env.authenticatedContext('someone-else').firestore()
-    for (const id of ['period-2026-11-10', 'week-2026-11-16']) {
+    for (const id of ['period-2026-11-10', 'week-2026-11-16', 'lottery-2026-11-10']) {
       const path = `users/adjuster/adjustments/${id}`
       const target = doc(owner, path)
       const record = { id, uid: 'adjuster', amount: 30000, reference: -2500, version: 1, deleted: false,

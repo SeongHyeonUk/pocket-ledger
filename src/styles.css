@@ -110,6 +110,7 @@ button:disabled { opacity: .65; cursor: wait; }
 .record-list .actions button { min-height: 44px; }
 .kpis .actions { flex-wrap: wrap; }
 .kpis .actions button { padding-inline: 8px; font-size: .85rem; }
+.kpis .lottery-button { justify-self: start; min-height: 44px; padding: 4px 10px; font-size: .8rem; }
 .actions input[type=number] { width: min(55%, 16rem); }
 .filters, .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .filters { grid-template-columns: 2fr 1fr 1fr; }
